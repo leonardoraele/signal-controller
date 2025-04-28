@@ -80,7 +80,7 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 		});
 	}
 
-	next<K extends keyof T>(signalName: K, { signal = undefined as AbortSignal|undefined } = {}): Promise<Parameters<T[K]>> {
+	once<K extends keyof T>(signalName: K, { signal = undefined as AbortSignal|undefined } = {}): Promise<Parameters<T[K]>> {
 		return new Promise<Parameters<T[K]>>((resolve, reject) => {
 			signal?.addEventListener('abort', reason => reject(reason));
 			this.on(signalName, { once: true }, ((values: any) => resolve(values)) as any);
