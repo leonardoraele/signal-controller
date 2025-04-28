@@ -1,6 +1,7 @@
 const ONCE_SYMBOL = Symbol('once');
 const EMIT = Symbol('emit');
-const CLEAR = Symbol('clear');
+const CLEAR_SIGNAL = Symbol('off');
+const CLEAR_ALL_SIGNALS = Symbol('clear');
 
 interface ListenerFunction {
 	(...args: any[]): unknown;
@@ -98,13 +99,13 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 		}
 	}
 
-	[CLEAR](signalName?: keyof T): void {
-		if (signalName === undefined) {
-			Object.keys(this.#listeners).forEach(key => this[CLEAR](key));
-		} else {
-			this.#listeners.get(signalName)
-				?.forEach(listener => this.off(signalName, listener));
-		}
+	[CLEAR_SIGNAL](signalName: keyof T): void {
+		this.#listeners.get(signalName)
+			?.forEach(listener => this.off(signalName, listener));
+	}
+
+	[CLEAR_ALL_SIGNALS](): void {
+		Object.keys(this.#listeners).forEach(key => this[CLEAR_SIGNAL](key));
 	}
 }
 
@@ -120,11 +121,27 @@ export class SignalController<T extends BaseEventEmitterAPI> {
 	}
 
 	off(signalName: keyof T): void {
-		this.signal[CLEAR](signalName);
+		this.signal[CLEAR_SIGNAL](signalName);
 	}
 
 	clear(): void {
-		this.signal[CLEAR]();
+		this.signal[CLEAR_ALL_SIGNALS]();
+	}
+
+	/** Removes all event listeners, stops accepting new event listeners, and future calls to {@link emit} will only
+	 * produce a warning message, but otherwise be ignored. */
+	destroy(): void {
+		this.clear();
+		this.emit = () => {
+			const dummy: { stack: string } = {} as any;
+			Error.captureStackTrace(dummy, SignalController);
+			console.warn("Ignoring event emitted to a SignalController that has been destroyed.", dummy.stack);
+		};
+		this.signal.on = () => {
+			const dummy: { stack: string } = {} as any;
+			Error.captureStackTrace(dummy, SignalController);
+			console.warn("Ignoring subscription of new listener to a SignalEmitter whose controller has been destroyed.", dummy.stack);
+		};
 	}
 
 	writableStream<K extends keyof T>(signalName: K): WritableStream<Parameters<T[K]>> {
