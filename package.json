@@ -1,6 +1,6 @@
 {
   "name": "signal-controller",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A lightweight event emitter with separation of concerns between emitter and listener inspired by the AbortController interface. It also supports using AbortController to remove listeners.",
   "author": "Leonardo Raele <leonardoraele@gmail.com>",
   "license": "MIT",
