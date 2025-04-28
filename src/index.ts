@@ -67,7 +67,7 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 		}
 	}
 
-	stream<K extends keyof T>(signalName: K): ReadableStream<Parameters<T[K]>> {
+	readableStream<K extends keyof T>(signalName: K): ReadableStream<Parameters<T[K]>> {
 		const aborter = new AbortController();
 		return new ReadableStream<Parameters<T[K]>>({
 			start: (controller) => {
@@ -125,5 +125,11 @@ export class SignalController<T extends BaseEventEmitterAPI> {
 
 	clear(): void {
 		this.signal[CLEAR]();
+	}
+
+	writableStream<K extends keyof T>(signalName: K): WritableStream<Parameters<T[K]>> {
+		return new WritableStream<Parameters<T[K]>>({
+			write: args => this.emit(signalName, ...args),
+		});
 	}
 }
