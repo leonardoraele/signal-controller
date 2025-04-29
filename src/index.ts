@@ -17,14 +17,31 @@ export interface SignalListenerOptions {
 	signal?: AbortSignal;
 }
 
+/**
+ * DO NOT INSTANTIATE THIS CLASS DIRECTLY. INSTEAD, CREATE A {@link SignalController} AND USE THE
+ * {@link SignalController.signal} PROPERTY.
+ */
 export class SignalEmitter<T extends BaseEventEmitterAPI> {
 	#listeners = new Map<keyof T, Set<BaseEventEmitterAPI['']>>();
+	#lastArgs?: Map<keyof T, any[]>;
+
+	constructor({ immediate = false } = {}) {
+		if (immediate) {
+			this.#lastArgs = new Map();
+		}
+	}
 
 	[EMIT]<K extends keyof T>(signalName: K, ...args: Parameters<T[K]>): boolean {
+		// Save arguments if necessary
+		{
+			this.#lastArgs?.set(signalName, args);
+		}
+
 		const listeners = this.#listeners.get(signalName);
 		if (!listeners) {
 			return false;
 		}
+
 		for (const listener of listeners) {
 			if (listener[ONCE_SYMBOL]) {
 				this.off(signalName, listener);
@@ -35,6 +52,7 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 				console.error(e);
 			}
 		}
+
 		return true;
 	}
 
@@ -43,6 +61,8 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 	on<K extends keyof T>(signalName: K, ...args: any[]): void {
 		const listener: T[K] = typeof args[0] === 'function' ? args[0] : args[1];
 		const options: SignalListenerOptions|undefined = typeof args[0] === 'object' ? args[0] : undefined;
+
+		// Add listener to the list
 		{
 			const listeners = this.#listeners.get(signalName);
 			if (listeners) {
@@ -51,6 +71,8 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 				this.#listeners.set(signalName, new Set([listener]));
 			}
 		}
+
+		// Handles `once` option
 		{
 			if (options?.once) {
 				Object.defineProperty(listener, ONCE_SYMBOL, {
@@ -61,14 +83,24 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 				});
 			}
 		}
+
+		// Handles `signal` option
 		{
 			options?.signal?.addEventListener('abort', () => {
 				this.off(signalName, listener);
 			}, { once: true });
 		}
+
+		// Handles `immediate` option
+		{
+			const lastArgs = this.#lastArgs?.get(signalName);
+			if (lastArgs) {
+				listener(...lastArgs);
+			}
+		}
 	}
 
-	readableStream<K extends keyof T>(signalName: K): ReadableStream<Parameters<T[K]>> {
+	createReadableStream<K extends keyof T>(signalName: K): ReadableStream<Parameters<T[K]>> {
 		const aborter = new AbortController();
 		return new ReadableStream<Parameters<T[K]>>({
 			start: (controller) => {
@@ -109,15 +141,24 @@ export class SignalEmitter<T extends BaseEventEmitterAPI> {
 	}
 }
 
+interface SignalControllerOptions {
+	/** If this option is true, the signal emitter will immediately call newly subscribed listeners with the last
+	 * arguments emitted (if any). */
+	immediate?: boolean;
+}
+
 export class SignalController<T extends BaseEventEmitterAPI> {
-	readonly signal = new SignalEmitter<T>();
+	readonly signal: SignalEmitter<T>;
 
 	constructor(
-		// private readonly options: SignalControllerOptions = {},
-	) {}
+		options: SignalControllerOptions = {},
+	) {
+		this.signal = new SignalEmitter<T>({ immediate: options.immediate });
+	}
 
-	emit<K extends keyof T>(signalName: K, ...args: Parameters<T[K]>): void {
-		this.signal[EMIT](signalName, ...args);
+	/** Emits a signal with some payload. Returns true if the signal was handled by at least one listener. */
+	emit<K extends keyof T>(signalName: K, ...args: Parameters<T[K]>): boolean {
+		return this.signal[EMIT](signalName, ...args);
 	}
 
 	off(signalName: keyof T): void {
@@ -136,6 +177,7 @@ export class SignalController<T extends BaseEventEmitterAPI> {
 			const dummy: { stack: string } = {} as any;
 			Error.captureStackTrace(dummy, SignalController);
 			console.warn("Ignoring event emitted to a SignalController that has been destroyed.", dummy.stack);
+			return false;
 		};
 		this.signal.on = () => {
 			const dummy: { stack: string } = {} as any;
@@ -144,9 +186,9 @@ export class SignalController<T extends BaseEventEmitterAPI> {
 		};
 	}
 
-	writableStream<K extends keyof T>(signalName: K): WritableStream<Parameters<T[K]>> {
+	createWritableStream<K extends keyof T>(signalName: K): WritableStream<Parameters<T[K]>> {
 		return new WritableStream<Parameters<T[K]>>({
-			write: args => this.emit(signalName, ...args),
+			write: args => void this.emit(signalName, ...args),
 		});
 	}
 }
