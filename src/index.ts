@@ -2,6 +2,7 @@ const ONCE_SYMBOL = Symbol('once');
 const EMIT = Symbol('emit');
 const CLEAR_SIGNAL = Symbol('off');
 const CLEAR_ALL_SIGNALS = Symbol('clear');
+const COUNT_LISTENERS = Symbol('countListeners');
 
 interface ListenerFunction {
 	(...args: any[]): unknown;
@@ -149,6 +150,10 @@ class SignalEmitter<T extends BaseEventEmitterAPI> {
 	[CLEAR_ALL_SIGNALS](): void {
 		Object.keys(this.#listeners).forEach(key => this[CLEAR_SIGNAL](key));
 	}
+
+	[COUNT_LISTENERS](signalName: keyof T): number {
+		return this.#listeners.get(signalName)?.size ?? 0;
+	}
 }
 
 interface SignalControllerOptions {
@@ -218,6 +223,11 @@ export class SignalController<T extends BaseEventEmitterAPI> {
 			}
 			console.warn("Ignoring subscription of new listener to a SignalEmitter whose controller has been destroyed.", dummy.stack);
 		};
+	}
+
+	/** Checks whether there are listeners attached for the specified signal. */
+	testSignal(signalName: keyof T): boolean {
+		return this.emitter[COUNT_LISTENERS](signalName) > 0;
 	}
 
 	/** Creates a writable stream that produces signals of the specified type for each chunk of data it receives. */
